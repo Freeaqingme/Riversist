@@ -13,12 +13,12 @@ import (
 	"os/exec"
 	"os/signal"
 	"reflect"
+	"riversist/log"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
-	"riversist/log"
 	"time"
 	"unsafe"
 )
@@ -262,7 +262,7 @@ func isIpHam(ip string) bool {
 	split_ip := strings.Split(ip, ".")
 	rev_ip := strings.Join([]string{split_ip[3], split_ip[2], split_ip[1], split_ip[0]}, ".")
 
-	host, err := net.LookupHost(fmt.Sprintf("configureme.%v.dnsbl.httpbl.org", rev_ip))
+	host, err := net.LookupHost(fmt.Sprintf("configurizethis.%v.dnsbl.httpbl.org", rev_ip))
 	if len(host) == 0 {
 		logger.Log(log.LOG_DEBUG, "Received no result from httpbl.org:", err.Error())
 		return true
