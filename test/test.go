@@ -199,8 +199,8 @@ func isIpHam(ip string) bool {
     score := (10/stale_period)*threat_score
 
     // Prefer it to be at least 10 days stale with a score of <25
-    if stale_period > 10 {
-      logger.Log(syslog.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: stale, stale_period:", strconv.Itoa(stale_period), ", stale_threshold: ", strconv.Itoa(10), " verdict: ham, dnsbl_retval: ", host[0])
+    if stale_period > 14 {
+      logger.Log(syslog.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: stale, stale_period:", strconv.Itoa(stale_period), ", stale_threshold: ", strconv.Itoa(14), " verdict: ham, dnsbl_retval: ", host[0])
       return true
     }
 
@@ -279,3 +279,4 @@ func (l Logger) syslog(level syslog.Priority, msg string) {
       case syslog.LOG_DEBUG:   w.Debug(msg)
     }
 }
+c
