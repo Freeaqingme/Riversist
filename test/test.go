@@ -2,23 +2,23 @@ package main
 
 import (
     "bytes"
-    "fmt"
-    "net"
     "flag"
+    "fmt"
+//    "gcfg"
     "io"
+    "net"
     "os"
     "os/signal"
     "os/exec"
-    "syscall"
-    "strings"
-    "strconv"
-    "log"
-    "log/syslog"
-    "time"
     "reflect"
+    "strconv"
+    "strings"
+    "syscall"
+    "test/log"
     "unsafe"
-//    "gcfg"
 )
+
+var logger log.Logger
 
 
 func main() {
@@ -30,8 +30,8 @@ func main() {
     flag.Parse()
 
     logger = logger.New(*logLevel)
-    logger.Log(syslog.LOG_NOTICE, "Starting...")
-    defer logger.Log(syslog.LOG_CRIT, "Exiting...")
+    logger.Log(log.LOG_NOTICE, "Starting...")
+    defer logger.Log(log.LOG_CRIT, "Exiting...")
 
     sig := make(chan bool)
     loop := make(chan error)
@@ -48,6 +48,8 @@ func main() {
 
 }
 
+
+
 // We make sigHandler receive a channel on which we will report the value of var quit
 func sigHandler(q chan bool) {
     var quit bool
@@ -56,7 +58,7 @@ func sigHandler(q chan bool) {
     signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
     for signal := range c {
-        logger.Log(syslog.LOG_NOTICE, "Received signal: "+signal.String())
+        logger.Log(log.LOG_NOTICE, "Received signal: "+signal.String())
 
         switch signal {
             case syscall.SIGINT, syscall.SIGTERM:
@@ -67,7 +69,7 @@ func sigHandler(q chan bool) {
 
         if quit {
             quit = false
-            logger.Log(syslog.LOG_CRIT, "Terminating...")
+            logger.Log(log.LOG_CRIT, "Terminating...")
             //              closeDb()
             //              closeLog()
             os.Exit(0)
@@ -84,14 +86,14 @@ func server(listen string, loop chan error) {
          logger.Fatal(err.Error())
     }
     defer ln.Close() 
-    logger.Log(syslog.LOG_INFO, "Now listening on", listen)
+    logger.Log(log.LOG_INFO, "Now listening on", listen)
 
     for {
         loop <- nil
 
         c, err := ln.Accept()
         if err != nil {
-            logger.Log(syslog.LOG_WARNING, string(err.Error()))
+            logger.Log(log.LOG_WARNING, string(err.Error()))
             continue
         }
 
@@ -127,13 +129,13 @@ func handleServerConnection(c net.Conn) {
 
         n, err := c.Read(msg)
         if err == io.EOF {
-            logger.Log(syslog.LOG_DEBUG, fmt.Sprintf("received EOF from %s (%d bytes ignored)", c.RemoteAddr(), n))
+            logger.Log(log.LOG_DEBUG, fmt.Sprintf("received EOF from %s (%d bytes ignored)", c.RemoteAddr(), n))
             return
         } else  if err != nil {
-            logger.Log(syslog.LOG_INFO, fmt.Sprintf("ERROR while reading from %s: %s", c.RemoteAddr(), err))
+            logger.Log(log.LOG_INFO, fmt.Sprintf("ERROR while reading from %s: %s", c.RemoteAddr(), err))
             return
         }
-        logger.Log(syslog.LOG_DEBUG, fmt.Sprintf("received %v bytes from %s", n, c.RemoteAddr()))
+        logger.Log(log.LOG_DEBUG, fmt.Sprintf("received %v bytes from %s", n, c.RemoteAddr()))
 
 /*        n, err = c.Write(msg[:n])
         if err != nil {
@@ -166,7 +168,7 @@ func addIpToTable(ip string) {
     cmd.Stdout = &out
     err := cmd.Run()
     if err != nil {
-        logger.Log(syslog.LOG_ERR, "Could not execute " + cmdStr + ": ", err.Error())
+        logger.Log(log.LOG_ERR, "Could not execute " + cmdStr + ": ", err.Error())
     }
 
 }
@@ -183,14 +185,14 @@ func isIpHam(ip string) bool {
 
     host, err := net.LookupHost(fmt.Sprintf("configureme.%v.dnsbl.httpbl.org", rev_ip))
     if len(host) == 0 {
-      logger.Log(syslog.LOG_DEBUG, "Received no result from httpbl.org:", err.Error())
+      logger.Log(log.LOG_DEBUG, "Received no result from httpbl.org:", err.Error())
       return true
     }
 
     // Return value: "127", days gone stale, threat score, type (0 search engine, 1 suspicious, 2 harvester, 4 comment spammer)
     ret_octets := strings.Split(host[0], ".")
     if len(ret_octets) != 4 || ret_octets[0] != "127" {
-      logger.Log(syslog.LOG_INFO, "Invalid return value from httpbl.org:", string(host[0]))
+      logger.Log(log.LOG_INFO, "Invalid return value from httpbl.org:", string(host[0]))
       return true
     }
 
@@ -200,83 +202,15 @@ func isIpHam(ip string) bool {
 
     // Prefer it to be at least 10 days stale with a score of <25
     if stale_period > 14 {
-      logger.Log(syslog.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: stale, stale_period:", strconv.Itoa(stale_period), ", stale_threshold: ", strconv.Itoa(14), " verdict: ham, dnsbl_retval: ", host[0])
+      logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: stale, stale_period:", strconv.Itoa(stale_period), ", stale_threshold: ", strconv.Itoa(14), " verdict: ham, dnsbl_retval: ", host[0])
       return true
     }
 
     if score > 25 {
-      logger.Log(syslog.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, " score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: spam, dnsbl_retval:", host[0])
+      logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, " score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: spam, dnsbl_retval:", host[0])
       return false
     }
 
-    logger.Log(syslog.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, " score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: ham, dnsbl_retval:", host[0])
+    logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, " score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: ham, dnsbl_retval:", host[0])
     return true
 }
-
-
-
-/*********************
- ****** Logger *******
-*********************/
-
-var logger Logger
-
-type Logger struct {
-    SyslogWriter *syslog.Writer
-    Writer       *io.Writer
-    logLevel     int
-}
-
-func (l Logger) Log(level syslog.Priority, msgArray ...string) {
-    if int(level) > l.logLevel {
-      return
-    }
-
-    msg := strings.Join(msgArray, " ")
-    l.syslog(level, msg)
-
-    msg = fmt.Sprintf("%v [%d]: %v\n", time.Now(), os.Getpid(), strings.Trim(msg, "\n"))
-    
-    ioWriter := *l.Writer
-    ioWriter.Write([]byte(msg))
-}
-
-func (l Logger) Fatal(msgArray ...string) {
-    msg := strings.Join(msgArray, " ")
-    l.syslog(syslog.LOG_EMERG, msg)
-
-    panic(msg)
-}
-
-func (l Logger) New(logLevel int) Logger {
-    syslogWriter, e := syslog.New(syslog.LOG_NOTICE, "riversist")
-    if e != nil {
-        log.Fatal("Could not open syslog writer: ", e)
-    }
-
-    ioWriter := io.MultiWriter(os.Stdout)
-    logger := Logger{syslogWriter, &ioWriter, logLevel}
-
-    if logLevel < 0 || logLevel > 7 {
-        logger.logLevel = 7
-        logger.Fatal(fmt.Sprintf("Invalid loglevel %v given. Value must be in range of 0..7", logLevel)) 
-    }
-
-    return logger
-}
-
-func (l Logger) syslog(level syslog.Priority, msg string) {
-    w := l.SyslogWriter
-
-    switch level {
-      case syslog.LOG_EMERG:   w.Emerg(msg)
-      case syslog.LOG_ALERT:   w.Alert(msg)
-      case syslog.LOG_CRIT:    w.Crit(msg)
-      case syslog.LOG_ERR:     w.Err(msg)
-      case syslog.LOG_WARNING: w.Warning(msg)
-      case syslog.LOG_NOTICE:  w.Notice(msg)
-      case syslog.LOG_INFO:    w.Info(msg)
-      case syslog.LOG_DEBUG:   w.Debug(msg)
-    }
-}
-c
