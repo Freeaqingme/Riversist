@@ -33,11 +33,13 @@ type ipMap struct {
 var logger log.Logger
 var processedIps ipMap
 var processingIps ipMap
+var ownIps ipMap
 
 func main() {
 
 	processedIps = ipMap{m: make(map[string]int64)}
 	processingIps = ipMap{m: make(map[string]int64)}
+	ownIps = ipMap{m: make(map[string]int64)}
 
 	setProcessName("riversist")
 
@@ -50,6 +52,7 @@ func main() {
 
 	go cleanProcessedIps()
 	go cleanProcessingIps()
+	setOwnIps()
 
 	sig := make(chan bool)
 	loop := make(chan error)
@@ -112,6 +115,42 @@ func setProcessName(name string) error {
 	return nil
 }
 
+func setOwnIps() {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("Could not determine own IP's: %v", err))
+	}
+
+	ownIps.Lock()
+	defer ownIps.Unlock()
+
+	if len(ownIps.m) > 0 {
+		logger.Log(log.LOG_NOTICE, "Clearing ownIps table")
+		for k := range ownIps.m {
+			delete(ownIps.m, k)
+		}
+	}
+
+	for _, i := range ifaces {
+		addrs, err := i.Addrs()
+		if err != nil {
+			logger.Fatal(fmt.Sprintf("Could not determine own IP's: %v", err))
+		}
+
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok {
+				ip4 := ipnet.IP.To4()
+				if ip4 == nil {
+					continue
+				}
+				ownIps.m[ip4.String()] = 1337
+				logger.Log(log.LOG_INFO, fmt.Sprintf("Added %s to ownIps map", ip4))
+			}
+		}
+	}
+
+}
+
 func server(loop chan error) {
 
 	handle, err := pcap.OpenLive("eth0", 128, true, 0)
@@ -152,6 +191,14 @@ func server(loop chan error) {
 func processIp(ip string) {
 	curTime := time.Now().Unix()
 
+	ownIps.RLock()
+	if _, ok := ownIps.m[ip]; ok {
+		logger.Log(log.LOG_DEBUG, fmt.Sprintf("%v is in the ownIps map. Skipping", ip))
+		ownIps.RUnlock()
+		return
+	}
+	ownIps.RUnlock()
+
 	processedIps.RLock()
 	if _, ok := processedIps.m[ip]; ok {
 		logger.Log(log.LOG_DEBUG, fmt.Sprintf("%v has already been evaluated. Skipping", ip))
@@ -185,10 +232,10 @@ func processIp(ip string) {
 func addIpToTable(ip string) {
 	var cmdStr string
 	if isIpHam(ip) {
-		logger.Log(log.LOG_NOTICE, fmt.Sprintf("Evaluated IP. IP: %s, table: ham", ip))
+		logger.Log(log.LOG_NOTICE, fmt.Sprintf("Evaluated IP: %s, table: ham", ip))
 		cmdStr = "/home/dolf/Projects/Go/addIpToTable ham %s"
 	} else {
-		logger.Log(log.LOG_NOTICE, fmt.Sprintf("Evaluted IP. IP: %s, table: spam", ip))
+		logger.Log(log.LOG_NOTICE, fmt.Sprintf("Evaluted IP: %s, table: spam", ip))
 		cmdStr = "/home/dolf/Projects/Go/addIpToTable spam %s"
 	}
 
