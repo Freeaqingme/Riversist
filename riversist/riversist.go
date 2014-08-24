@@ -1,5 +1,3 @@
-//todo: exclude own ip's
-
 package main
 
 import (
@@ -20,7 +18,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"test/log"
+	"riversist/log"
 	"time"
 	"unsafe"
 )
