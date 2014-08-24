@@ -80,4 +80,3 @@ func (l Logger) syslog(level syslog.Priority, msg string) {
       case syslog.LOG_DEBUG:   w.Debug(msg)
     }
 }
-
