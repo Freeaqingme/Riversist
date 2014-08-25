@@ -1,13 +1,15 @@
+// sighup support
+// state file
 package main
 
 import (
 	"bytes"
+	"code.google.com/p/gcfg"
 	"code.google.com/p/gopacket"
 	"code.google.com/p/gopacket/layers"
 	"code.google.com/p/gopacket/pcap"
 	"flag"
 	"fmt"
-	//    "gcfg"
 	"net"
 	"os"
 	"os/exec"
@@ -23,6 +25,21 @@ import (
 	"unsafe"
 )
 
+type config struct {
+	Riversist struct {
+		Interface        string
+		Libpcap_Filter   string
+		Legit_Ip_Cmd     string
+		Malicious_Ip_Cmd string
+	}
+	ProjectHoneyPot struct {
+		Enabled      bool
+		Api_Key      string
+		Stale_Period int
+		Max_Score    int
+	}
+}
+
 type ipMap struct {
 	sync.RWMutex
 	m map[string]int64
@@ -32,6 +49,7 @@ var logger log.Logger
 var processedIps ipMap
 var processingIps ipMap
 var ownIps ipMap
+var Config = *new(config)
 
 func main() {
 
@@ -42,11 +60,17 @@ func main() {
 	setProcessName("riversist")
 
 	logLevel := flag.Int("loglevel", 5, "Syslog Loglevel (0-7, Emerg-Debug)")
+	configFile := flag.String("config", "", "Path to Config File")
 	flag.Parse()
 
 	logger = logger.New(*logLevel)
 	logger.Log(log.LOG_NOTICE, "Starting...")
 	defer logger.Log(log.LOG_CRIT, "Exiting...")
+
+	defaultConfig(&Config)
+	if *configFile != "" {
+		loadConfig(*configFile, &Config)
+	}
 
 	go cleanProcessedIps()
 	go cleanProcessingIps()
@@ -113,6 +137,31 @@ func setProcessName(name string) error {
 	return nil
 }
 
+func defaultConfig(cfg *config) {
+	cfg.Riversist.Interface = "eth0"
+	cfg.Riversist.Libpcap_Filter = "tcp and ip"
+
+	cfg.ProjectHoneyPot.Enabled = true
+	cfg.ProjectHoneyPot.Stale_Period = 14
+	cfg.ProjectHoneyPot.Max_Score = 25
+}
+
+func loadConfig(cfgFile string, cfg *config) {
+	err := gcfg.ReadFileInto(cfg, cfgFile)
+
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("Couldn't read config: %s", err))
+	}
+
+	if cfg.Riversist.Interface == "" {
+		logger.Fatal("Interface cannot be left empty")
+	}
+
+	if cfg.ProjectHoneyPot.Enabled && cfg.ProjectHoneyPot.Api_Key == "" {
+		logger.Fatal("An API key for Project HoneyPot must be set")
+	}
+}
+
 func setOwnIps() {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -150,12 +199,11 @@ func setOwnIps() {
 }
 
 func server(loop chan error) {
-
-	handle, err := pcap.OpenLive("eth0", 128, true, 0)
+	handle, err := pcap.OpenLive(Config.Riversist.Interface, 128, true, 0)
 	if err != nil {
 		panic(err)
 	}
-	if err := handle.SetBPFFilter("tcp and ip and (port 80 or port 443 or port 21 or port 20)"); err != nil { // optional
+	if err := handle.SetBPFFilter(Config.Riversist.Libpcap_Filter); err != nil { // optional
 		panic(err)
 	}
 
@@ -231,10 +279,10 @@ func addIpToTable(ip string) {
 	var cmdStr string
 	if isIpHam(ip) {
 		logger.Log(log.LOG_NOTICE, fmt.Sprintf("Evaluated IP: %s, table: ham", ip))
-		cmdStr = "/home/dolf/Projects/Go/addIpToTable ham %s"
+		cmdStr = Config.Riversist.Legit_Ip_Cmd
 	} else {
 		logger.Log(log.LOG_NOTICE, fmt.Sprintf("Evaluted IP: %s, table: spam", ip))
-		cmdStr = "/home/dolf/Projects/Go/addIpToTable spam %s"
+		cmdStr = Config.Riversist.Malicious_Ip_Cmd
 	}
 
 	cmdStr = fmt.Sprintf(cmdStr, ip)
@@ -262,7 +310,7 @@ func isIpHam(ip string) bool {
 	split_ip := strings.Split(ip, ".")
 	rev_ip := strings.Join([]string{split_ip[3], split_ip[2], split_ip[1], split_ip[0]}, ".")
 
-	host, err := net.LookupHost(fmt.Sprintf("configurizethis.%v.dnsbl.httpbl.org", rev_ip))
+	host, err := net.LookupHost(fmt.Sprintf("%v.%v.dnsbl.httpbl.org", Config.ProjectHoneyPot.Api_Key, rev_ip))
 	if len(host) == 0 {
 		logger.Log(log.LOG_DEBUG, "Received no result from httpbl.org:", err.Error())
 		return true
@@ -275,22 +323,25 @@ func isIpHam(ip string) bool {
 		return true
 	}
 
+	conf_stale_period := Config.ProjectHoneyPot.Stale_Period
+	conf_max_score := Config.ProjectHoneyPot.Max_Score
 	stale_period, _ := strconv.Atoi(ret_octets[1])
 	threat_score, _ := strconv.Atoi(ret_octets[2])
-	score := (10 / stale_period) * threat_score
+	// todo: What to do when stale_period == 0 ?
+	score := (conf_stale_period / stale_period) * threat_score
 
-	// Prefer it to be at least 10 days stale with a score of <25
-	if stale_period > 14 {
-		logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: stale, stale_period:", strconv.Itoa(stale_period), ", stale_threshold: ", strconv.Itoa(14), " verdict: ham, dnsbl_retval: ", host[0])
+	// Prefer it to be at least conf_stale_period days stale with a score of < conf_max_score
+	if stale_period > conf_stale_period {
+		logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: stale, stale_period:", strconv.Itoa(stale_period), ", stale_threshold: ", strconv.Itoa(conf_stale_period), " verdict: ham, dnsbl_retval: ", host[0])
 		return true
 	}
 
-	if score > 25 {
-		logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, " score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: spam, dnsbl_retval:", host[0])
+	if score > conf_max_score {
+		logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, " score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: spam, dnsbl_retval:", host[0])
 		return false
 	}
 
-	logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, " score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(25), ", verdict: ham, dnsbl_retval:", host[0])
+	logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, " score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: ham, dnsbl_retval:", host[0])
 	return true
 }
 
