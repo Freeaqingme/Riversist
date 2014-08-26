@@ -3,17 +3,17 @@
 interface        = eth0
 
 # For now, make sure you always filter on both TCP and IPv4 ('ip')
-libpcap-filter    = "tcp and ip and (port 80 or port 443 or port 21 or port 20)"
+libpcap-filter    = "tcp and ip and (port 80 or port 443)"
 
-# Commands to call when IP is determined to be legit or malicious
-legit-ip-cmd     = "/home/dolf/Projects/Go/addIpToTable ham %s"
-malicious-ip-cmd = "/home/dolf/Projects/Go/addIpToTable spam %s"
+# Commands to call when IP is determined to malicious or legit
+malicious-ip-cmd = "/usr/local/sbin/pfctl -t spammers -T add %s"
+legit-ip-cmd     = ""
 
 [projectHoneyPot]
 enabled	          = true
 
 # API Key for Project HoneyPot
-api-key           = "foobar123123123"
+api-key           = ""
 
 # Period in days after which HoneyPot hits should be ignored
 #stale-period     = 14
