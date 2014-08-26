@@ -285,6 +285,11 @@ func addIpToTable(ip string) {
 		cmdStr = Config.Riversist.Malicious_Ip_Cmd
 	}
 
+	if cmdStr == "" {
+		logger.Log(log.LOG_DEBUG, "Not calling any exetuable cause it hasn't been configured")
+		return
+	}
+
 	cmdStr = fmt.Sprintf(cmdStr, ip)
 	cmdArr := strings.Split(cmdStr, " ")
 	cmd := exec.Command(cmdArr[0], cmdArr[1:len(cmdArr)]...)
@@ -299,8 +304,6 @@ func addIpToTable(ip string) {
 }
 
 func isIpHam(ip string) bool {
-	_ = fmt.Sprintf("%v", ip)
-	return true // Make sure we do not DDOS project honeypot first
 
 	if strings.Index(ip, ".") < 0 {
 		// As we don't support IPv6 yet, it is all considered HAM
@@ -337,11 +340,11 @@ func isIpHam(ip string) bool {
 	}
 
 	if score > conf_max_score {
-		logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, " score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: spam, dnsbl_retval:", host[0])
+		logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: spam, dnsbl_retval:", host[0])
 		return false
 	}
 
-	logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, " score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: ham, dnsbl_retval:", host[0])
+	logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: ham, dnsbl_retval:", host[0])
 	return true
 }
 

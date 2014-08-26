@@ -12,7 +12,7 @@ Support planned for:
 - [Stopforumspam](http://www.stopforumspam.com/) (via [Tornevall DNSBL](https://dnsbl.tornevall.org/?do=usage))
 - [Sorbs](http://www.sorbs.net/)
 - Other generic dnsbl's
-- and more?
+- And more?
 
 ## Getting started
 ```
