@@ -4,7 +4,6 @@ package main
 
 import (
 	"bytes"
-	"code.google.com/p/gcfg"
 	"code.google.com/p/gopacket"
 	"code.google.com/p/gopacket/layers"
 	"code.google.com/p/gopacket/pcap"
@@ -15,7 +14,10 @@ import (
 	"os/exec"
 	"os/signal"
 	"reflect"
+	"riversist/config"
+	"riversist/ipChecker"
 	"riversist/log"
+	"riversist/projectHoneyPot"
 	"runtime"
 	"strconv"
 	"strings"
@@ -24,21 +26,6 @@ import (
 	"time"
 	"unsafe"
 )
-
-type config struct {
-	Riversist struct {
-		Interface        string
-		Libpcap_Filter   string
-		Legit_Ip_Cmd     string
-		Malicious_Ip_Cmd string
-	}
-	ProjectHoneyPot struct {
-		Enabled      bool
-		Api_Key      string
-		Stale_Period int
-		Max_Score    int
-	}
-}
 
 type ipMap struct {
 	sync.RWMutex
@@ -49,7 +36,8 @@ var logger log.Logger
 var processedIps ipMap
 var processingIps ipMap
 var ownIps ipMap
-var Config = *new(config)
+var Config = *new(config.Config)
+var checkers []ipChecker.IpChecker
 
 func main() {
 
@@ -67,14 +55,18 @@ func main() {
 	logger.Log(log.LOG_NOTICE, "Starting...")
 	defer logger.Log(log.LOG_CRIT, "Exiting...")
 
-	defaultConfig(&Config)
+	config.DefaultConfig(&Config)
 	if *configFile != "" {
-		loadConfig(*configFile, &Config)
+		config.LoadConfig(*configFile, &Config, logger)
 	}
 
-	go cleanProcessedIps()
-	go cleanProcessingIps()
+	go pruneIpMap(&processingIps, 60, 60, "processingIps")
+	go pruneIpMap(&processedIps, (24 * 60 * 60), 1800, "processedIps")
+
+	//go cleanProcessedIps()
+	//go cleanProcessingIps()
 	setOwnIps()
+	initializeCheckers()
 
 	sig := make(chan bool)
 	loop := make(chan error)
@@ -137,31 +129,6 @@ func setProcessName(name string) error {
 	return nil
 }
 
-func defaultConfig(cfg *config) {
-	cfg.Riversist.Interface = "eth0"
-	cfg.Riversist.Libpcap_Filter = "tcp and ip"
-
-	cfg.ProjectHoneyPot.Enabled = true
-	cfg.ProjectHoneyPot.Stale_Period = 14
-	cfg.ProjectHoneyPot.Max_Score = 25
-}
-
-func loadConfig(cfgFile string, cfg *config) {
-	err := gcfg.ReadFileInto(cfg, cfgFile)
-
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("Couldn't read config: %s", err))
-	}
-
-	if cfg.Riversist.Interface == "" {
-		logger.Fatal("Interface cannot be left empty")
-	}
-
-	if cfg.ProjectHoneyPot.Enabled && cfg.ProjectHoneyPot.Api_Key == "" {
-		logger.Fatal("An API key for Project HoneyPot must be set")
-	}
-}
-
 func setOwnIps() {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -196,6 +163,11 @@ func setOwnIps() {
 		}
 	}
 
+}
+
+func initializeCheckers() {
+	projectHoneyPot := new(projectHoneyPot.IpChecker)
+	checkers = []ipChecker.IpChecker{projectHoneyPot}
 }
 
 func server(loop chan error) {
@@ -277,12 +249,22 @@ func processIp(ip string) {
 
 func addIpToTable(ip string) {
 	var cmdStr string
-	if isIpHam(ip) {
-		logger.Log(log.LOG_NOTICE, fmt.Sprintf("Evaluated IP: %s, table: ham", ip))
-		cmdStr = Config.Riversist.Legit_Ip_Cmd
-	} else {
-		logger.Log(log.LOG_NOTICE, fmt.Sprintf("Evaluted IP: %s, table: spam", ip))
+
+	dnsbl := ""
+	// Ideally we would do this concurrently. But who cares, really...
+	for _, checker := range checkers {
+		if checker.IsIpMalicious(ip, logger, Config) {
+			dnsbl = checker.GetName()
+			break
+		}
+	}
+
+	if dnsbl != "" {
+		logger.Log(log.LOG_NOTICE, fmt.Sprintf("Evaluted IP: %s, table: malicious. DNSBL: %s", ip, dnsbl))
 		cmdStr = Config.Riversist.Malicious_Ip_Cmd
+	} else {
+		logger.Log(log.LOG_NOTICE, fmt.Sprintf("Evaluated IP: %s, table: legit", ip))
+		cmdStr = Config.Riversist.Legit_Ip_Cmd
 	}
 
 	if cmdStr == "" {
@@ -298,97 +280,30 @@ func addIpToTable(ip string) {
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
-		logger.Log(log.LOG_ERR, "Could not execute "+cmdStr+": ", err.Error())
+		logger.Log(log.LOG_ERR, fmt.Sprintf("Could not execute %s: %s", cmdStr, err.Error()))
 	}
 
 }
 
-func isIpHam(ip string) bool {
+func pruneIpMap(ipMap *ipMap, interval int, threshold int, name string) {
 
-	if strings.Index(ip, ".") < 0 {
-		// As we don't support IPv6 yet, it is all considered HAM
-		return true
-	}
-
-	split_ip := strings.Split(ip, ".")
-	rev_ip := strings.Join([]string{split_ip[3], split_ip[2], split_ip[1], split_ip[0]}, ".")
-
-	host, err := net.LookupHost(fmt.Sprintf("%v.%v.dnsbl.httpbl.org", Config.ProjectHoneyPot.Api_Key, rev_ip))
-	if len(host) == 0 {
-		logger.Log(log.LOG_DEBUG, "Received no result from httpbl.org:", err.Error())
-		return true
-	}
-
-	// Return value: "127", days gone stale, threat score, type (0 search engine, 1 suspicious, 2 harvester, 4 comment spammer)
-	ret_octets := strings.Split(host[0], ".")
-	if len(ret_octets) != 4 || ret_octets[0] != "127" {
-		logger.Log(log.LOG_INFO, "Invalid return value from httpbl.org:", string(host[0]))
-		return true
-	}
-
-	conf_stale_period := Config.ProjectHoneyPot.Stale_Period
-	conf_max_score := Config.ProjectHoneyPot.Max_Score
-	stale_period, _ := strconv.Atoi(ret_octets[1])
-	threat_score, _ := strconv.Atoi(ret_octets[2])
-	// todo: What to do when stale_period == 0 ?
-	score := (conf_stale_period / stale_period) * threat_score
-
-	// Prefer it to be at least conf_stale_period days stale with a score of < conf_max_score
-	if stale_period > conf_stale_period {
-		logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: stale, stale_period:", strconv.Itoa(stale_period), ", stale_threshold: ", strconv.Itoa(conf_stale_period), " verdict: ham, dnsbl_retval: ", host[0])
-		return true
-	}
-
-	if score > conf_max_score {
-		logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: spam, dnsbl_retval:", host[0])
-		return false
-	}
-
-	logger.Log(log.LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: ham, dnsbl_retval:", host[0])
-	return true
-}
-
-func cleanProcessedIps() {
-
-	ticker := time.NewTicker(time.Second * 1800)
+	ticker := time.NewTicker(time.Second * time.Duration(interval))
 
 	for _ = range ticker.C {
-		logger.Log(log.LOG_INFO, "Cleaning the processedIps map.")
+		logger.Log(log.LOG_INFO, fmt.Sprintf("Cleaning the %s map", name))
 
-		cleanThreshold := time.Now().Unix() - (24 * 60 * 60)
+		unixTimeThreshold := time.Now().Unix() - int64(threshold)
 
 		counter := 0
-		processedIps.Lock()
-		for k, v := range processedIps.m {
-			if v < cleanThreshold {
-				delete(processedIps.m, k)
+		ipMap.Lock()
+		for k, v := range ipMap.m {
+			if v < unixTimeThreshold {
+				delete(ipMap.m, k)
 				counter++
 			}
 		}
-		logger.Log(log.LOG_INFO, fmt.Sprintf("Cleaned %v items from processedIps. Current size is: %v", counter, len(processedIps.m)))
-		processedIps.Unlock()
+		logger.Log(log.LOG_INFO, fmt.Sprintf("Cleaned %v items from %s. Current size is: %v", counter, name, len(ipMap.m)))
+		ipMap.Unlock()
 	}
-}
 
-func cleanProcessingIps() {
-
-	ticker := time.NewTicker(time.Second * 60)
-
-	for _ = range ticker.C {
-		logger.Log(log.LOG_INFO, "Cleaning the processingIps map.")
-
-		cleanThreshold := time.Now().Unix() - 60
-
-		counter := 0
-		processingIps.Lock()
-		for k, v := range processingIps.m {
-			if v < cleanThreshold {
-				delete(processingIps.m, k)
-				counter++
-			}
-		}
-		logger.Log(log.LOG_INFO, fmt.Sprintf("Cleaned %v items from processingIps. Current size is: %v", counter, len(processingIps.m)))
-		processingIps.Unlock()
-
-	}
 }
