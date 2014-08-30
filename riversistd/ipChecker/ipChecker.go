@@ -5,7 +5,7 @@ import (
 )
 
 type IpChecker interface {
-	IsIpMalicious(ip string, logger Logger, config Config) bool
+	IsIpMalicious(ip string, logger Logger) bool
 	GetName() string
 }
 

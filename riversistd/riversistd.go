@@ -70,8 +70,10 @@ func Main() {
 }
 
 func initializeCheckers() {
-	projectHoneyPot := new(ipChecker.ProjectHoneyPotChecker)
-	checkers = []ipChecker.IpChecker{projectHoneyPot}
+	if Config.ProjectHoneyPot.Enabled {
+		projectHoneyPot := ipChecker.NewProjectHoneyPotChecker(Config.ProjectHoneyPot)
+		checkers = []ipChecker.IpChecker{projectHoneyPot}
+	}
 }
 
 func processIp(ip string) {
@@ -121,7 +123,7 @@ func addIpToTable(ip string) {
 	dnsbl := ""
 	// Ideally we would do this concurrently. But who cares, really...
 	for _, checker := range checkers {
-		if checker.IsIpMalicious(ip, logger, &Config.ProjectHoneyPot) {
+		if checker.IsIpMalicious(ip, logger) {
 			dnsbl = checker.GetName()
 			break
 		}

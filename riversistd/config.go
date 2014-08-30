@@ -4,7 +4,6 @@ import (
 	"code.google.com/p/gcfg"
 	"fmt"
 	"riversist/riversistd/ipChecker"
-	//	"riversist/riversistd/log"
 )
 
 type config struct {

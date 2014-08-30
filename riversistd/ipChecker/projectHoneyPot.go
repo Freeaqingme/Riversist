@@ -15,32 +15,16 @@ type ProjectHoneyPotConfig struct {
 	Max_Score    int
 }
 
-func (config *ProjectHoneyPotConfig) GetS(key string) string {
-	switch key {
-	case "Api_Key":
-		return config.Api_Key
-	}
-	panic("Invalid config key requested")
-}
-func (config *ProjectHoneyPotConfig) GetI(key string) int {
-	switch key {
-	case "Stale_Period":
-		return config.Stale_Period
-	case "Max_Score":
-		return config.Max_Score
-	}
-	panic("Invalid config key requested")
-}
-
 type ProjectHoneyPotChecker struct {
 	IpChecker
+	config ProjectHoneyPotConfig
 }
 
 func (checker *ProjectHoneyPotChecker) GetName() string {
 	return "projectHoneyPot"
 }
 
-func (checker *ProjectHoneyPotChecker) IsIpMalicious(ip string, logger Logger, config Config) bool {
+func (checker *ProjectHoneyPotChecker) IsIpMalicious(ip string, logger Logger) bool {
 
 	if strings.Index(ip, ".") < 0 {
 		// As we don't support IPv6 yet, it is all considered HAM
@@ -50,7 +34,7 @@ func (checker *ProjectHoneyPotChecker) IsIpMalicious(ip string, logger Logger, c
 	split_ip := strings.Split(ip, ".")
 	rev_ip := strings.Join([]string{split_ip[3], split_ip[2], split_ip[1], split_ip[0]}, ".")
 
-	host, err := net.LookupHost(fmt.Sprintf("%v.%v.dnsbl.httpbl.org", config.GetS("Api_Key"), rev_ip))
+	host, err := net.LookupHost(fmt.Sprintf("%v.%v.dnsbl.httpbl.org", checker.config.Api_Key, rev_ip))
 	if len(host) == 0 {
 		logger.Log(LOG_DEBUG, "Received no result from httpbl.org:", err.Error())
 		return false
@@ -63,8 +47,8 @@ func (checker *ProjectHoneyPotChecker) IsIpMalicious(ip string, logger Logger, c
 		return false
 	}
 
-	conf_stale_period := config.GetI("Stale_Period")
-	conf_max_score := config.GetI("Max_Score")
+	conf_stale_period := checker.config.Stale_Period
+	conf_max_score := checker.config.Max_Score
 	stale_period, _ := strconv.Atoi(ret_octets[1])
 	threat_score, _ := strconv.Atoi(ret_octets[2])
 	// todo: What to do when stale_period == 0 ?
@@ -84,4 +68,11 @@ func (checker *ProjectHoneyPotChecker) IsIpMalicious(ip string, logger Logger, c
 	logger.Log(LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: legit, dnsbl_retval:", host[0])
 	return false
 
+}
+
+func NewProjectHoneyPotChecker(config ProjectHoneyPotConfig) *ProjectHoneyPotChecker {
+	ret := new(ProjectHoneyPotChecker)
+
+	ret.config = config
+	return ret
 }
