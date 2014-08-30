@@ -1,27 +1,23 @@
-package config
+package riversistd
 
 import (
 	"code.google.com/p/gcfg"
 	"fmt"
-	"riversist/log"
+	"riversist/riversistd/ipChecker"
+//	"riversist/riversistd/log"
 )
 
-type Config struct {
+type config struct {
 	Riversist struct {
 		Interface        string
 		Libpcap_Filter   string
 		Legit_Ip_Cmd     string
 		Malicious_Ip_Cmd string
 	}
-	ProjectHoneyPot struct {
-		Enabled      bool
-		Api_Key      string
-		Stale_Period int
-		Max_Score    int
-	}
+	ProjectHoneyPot ipChecker.ProjectHoneyPotConfig
 }
 
-func LoadConfig(cfgFile string, cfg *Config, logger log.Logger) {
+func LoadConfig(cfgFile string, cfg *config, logger Logger) {
 	err := gcfg.ReadFileInto(cfg, cfgFile)
 
 	if err != nil {
@@ -37,7 +33,7 @@ func LoadConfig(cfgFile string, cfg *Config, logger log.Logger) {
 	}
 }
 
-func DefaultConfig(cfg *Config) {
+func DefaultConfig(cfg *config) {
 	cfg.Riversist.Interface = "eth0"
 	cfg.Riversist.Libpcap_Filter = "tcp and ip"
 
