@@ -25,9 +25,7 @@ const (
 	LOG_DEBUG
 )
 
-
 type Logger interface {
-	Fatal(msg ...string)	
+	Fatal(msg ...string)
 	Log(level syslog.Priority, msgArray ...string)
-	
 }

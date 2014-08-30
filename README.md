@@ -3,9 +3,9 @@ Riversist
 
 Riversist is an application that monitors network traffic 
 using libpcap for malicious traffic based on various blacklists.
-Once a malicious IP has been detected a to-be-specified
-executable is called, so you can e.g. insert a firewall rule
-to block traffic from this IP.
+Once a malicious IP has been identified, a to-be-specified
+executable is called. This allows you to e.g. insert a firewall
+rule to block traffic from this IP.
 
 For more config options, please see riversist.conf.dist
 

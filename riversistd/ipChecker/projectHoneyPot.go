@@ -17,18 +17,20 @@ type ProjectHoneyPotConfig struct {
 
 func (config *ProjectHoneyPotConfig) GetS(key string) string {
 	switch key {
-		case "Api_Key": return config.Api_Key
+	case "Api_Key":
+		return config.Api_Key
 	}
 	panic("Invalid config key requested")
 }
 func (config *ProjectHoneyPotConfig) GetI(key string) int {
 	switch key {
-		case "Stale_Period": return config.Stale_Period
-		case "Max_Score":    return config.Max_Score
+	case "Stale_Period":
+		return config.Stale_Period
+	case "Max_Score":
+		return config.Max_Score
 	}
 	panic("Invalid config key requested")
 }
-
 
 type ProjectHoneyPotChecker struct {
 	IpChecker
@@ -39,8 +41,6 @@ func (checker *ProjectHoneyPotChecker) GetName() string {
 }
 
 func (checker *ProjectHoneyPotChecker) IsIpMalicious(ip string, logger Logger, config Config) bool {
-
-fmt.Println(config)
 
 	if strings.Index(ip, ".") < 0 {
 		// As we don't support IPv6 yet, it is all considered HAM
