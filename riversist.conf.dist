@@ -9,6 +9,16 @@ libpcap-filter    = "tcp and ip and (port 80 or port 443)"
 malicious-ip-cmd = "/usr/local/sbin/pfctl -t spammers -T add %s"
 legit-ip-cmd     = ""
 
+
+# Number of seconds after which a processed IP should be processed again.
+# Set to 0 to never expire any result (not recommended).
+# auto-expiry-time = 86400
+
+# Interval with which to prune any processed items that have been processed
+# more than 'auto-expiry-time' seconds ago.
+# prune-interval = 1800
+
+
 [projectHoneyPot]
 enabled	          = true
 

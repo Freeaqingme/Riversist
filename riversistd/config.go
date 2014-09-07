@@ -19,6 +19,8 @@ type config struct {
 		Libpcap_Filter   string
 		Legit_Ip_Cmd     string
 		Malicious_Ip_Cmd string
+		Auto_Expiry_Time uint
+		Prune_Interval   uint
 	}
 	ProjectHoneyPot ipChecker.ProjectHoneyPotConfig
 }
@@ -42,6 +44,8 @@ func LoadConfig(cfgFile string, cfg *config, logger Logger) {
 func DefaultConfig(cfg *config) {
 	cfg.Riversist.Interface = "eth0"
 	cfg.Riversist.Libpcap_Filter = "tcp and ip"
+	cfg.Riversist.Auto_Expiry_Time = 86400
+	cfg.Riversist.Prune_Interval = 1800
 
 	cfg.ProjectHoneyPot.Enabled = true
 	cfg.ProjectHoneyPot.Stale_Period = 14

@@ -57,7 +57,9 @@ func Main() {
 	}
 
 	go pruneIpMap(&processingIps, 60, 60, "processingIps")
-	go pruneIpMap(&processedIps, (24 * 60 * 60), 1800, "processedIps")
+	if Config.Riversist.Auto_Expiry_Time != 0 {
+		go pruneIpMap(&processedIps, Config.Riversist.Auto_Expiry_Time, Config.Riversist.Prune_Interval, "processedIps")
+	}
 
 	setOwnIps()
 	initializeCheckers()
@@ -163,7 +165,7 @@ func addIpToTable(ip string) {
 
 }
 
-func pruneIpMap(ipMap *ipMap, interval int, threshold int, name string) {
+func pruneIpMap(ipMap *ipMap, interval uint, threshold uint, name string) {
 
 	ticker := time.NewTicker(time.Second * time.Duration(interval))
 

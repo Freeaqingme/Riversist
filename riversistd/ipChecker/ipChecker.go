@@ -16,7 +16,7 @@ type IpChecker interface {
 	GetName() string
 }
 
-type Config interface {}
+type Config interface{}
 
 const (
 	LOG_EMERG syslog.Priority = iota
