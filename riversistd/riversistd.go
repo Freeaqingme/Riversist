@@ -80,9 +80,15 @@ func Main() {
 }
 
 func initializeCheckers() {
+	checkers = make([]ipChecker.IpChecker, 0)
+
 	if Config.ProjectHoneyPot.Enabled {
 		projectHoneyPot := ipChecker.NewProjectHoneyPotChecker(Config.ProjectHoneyPot)
-		checkers = []ipChecker.IpChecker{projectHoneyPot}
+		checkers = append(checkers, projectHoneyPot)
+	}
+
+	for _, dnsblConfig := range Config.Dnsbl {
+		checkers = append(checkers, ipChecker.NewDnsblChecker(*dnsblConfig))
 	}
 }
 
@@ -140,10 +146,10 @@ func addIpToTable(ip string) {
 	}
 
 	if dnsbl != "" {
-		logger.Log(LOG_NOTICE, fmt.Sprintf("Evaluted IP: %s, table: malicious. DNSBL: %s", ip, dnsbl))
+		logger.Log(LOG_NOTICE, fmt.Sprintf("Evaluted IP: %s, verdict: malicious. DNSBL: %s", ip, dnsbl))
 		cmdStr = Config.Riversist.Malicious_Ip_Cmd
 	} else {
-		logger.Log(LOG_NOTICE, fmt.Sprintf("Evaluated IP: %s, table: legit", ip))
+		logger.Log(LOG_NOTICE, fmt.Sprintf("Evaluated IP: %s, verdict: legit", ip))
 		cmdStr = Config.Riversist.Legit_Ip_Cmd
 	}
 

@@ -23,6 +23,7 @@ type config struct {
 		Prune_Interval   uint
 	}
 	ProjectHoneyPot ipChecker.ProjectHoneyPotConfig
+	Dnsbl           map[string]*ipChecker.DnsblConfig
 }
 
 func LoadConfig(cfgFile string, cfg *config, logger Logger) {

@@ -30,3 +30,15 @@ api-key           = ""
 
 # Threshold above which a HoneyPot hit will result in a malicious verdict
 #max-score        = 25
+
+
+[dnsbl "tornevall"]
+# Tornevall DNSBL: https://dnsbl.tornevall.org/index.php?do=usage
+
+
+# The host to check any ip adresses against
+host = "dnsbl.tornevall.org"
+
+# If the last octet of the result is above, or equal to, this threshold
+# the IP is considered to be malicious.
+malicious-threshold = 32

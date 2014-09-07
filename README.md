@@ -11,13 +11,7 @@ For more config options, please see riversist.conf.dist
 
 Support has been implemented for:
 - [Project Honey Pot](http://www.projecthoneypot.org)
-
-Support planned for:
-- [Spamhaus](http://www.spamhaus.org/)
-- [Stopforumspam](http://www.stopforumspam.com/) (via [Tornevall DNSBL](https://dnsbl.tornevall.org/?do=usage))
-- [Sorbs](http://www.sorbs.net/)
-- Other generic dnsbl's
-- And more?
+- DNSBLs like [Spamhaus](http://www.spamhaus.org/), [Sorbs](http://www.sorbs.net/) or [Tornevall DNSBL](https://dnsbl.tornevall.org/?do=usage))/[Stopforumspam](http://www.stopforumspam.com/)
 
 ## Getting started
 ```
