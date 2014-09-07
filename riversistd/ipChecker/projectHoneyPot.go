@@ -58,7 +58,9 @@ func (checker *ProjectHoneyPotChecker) IsIpMalicious(ip string, logger Logger) b
 	conf_max_score := checker.config.Max_Score
 	stale_period, _ := strconv.Atoi(ret_octets[1])
 	threat_score, _ := strconv.Atoi(ret_octets[2])
-	// todo: What to do when stale_period == 0 ?
+	if stale_period == 0 {
+		stale_period = 1 // Prevent division by zero, still get a decent score
+	}
 	score := (conf_stale_period / stale_period) * threat_score
 
 	// Prefer it to be at least conf_stale_period days stale with a score of < conf_max_score
@@ -68,8 +70,8 @@ func (checker *ProjectHoneyPotChecker) IsIpMalicious(ip string, logger Logger) b
 	}
 
 	if score > conf_max_score {
-		logger.Log(LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: legit, dnsbl_retval:", host[0])
-		return false
+		logger.Log(LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: malicious, dnsbl_retval:", host[0])
+		return true
 	}
 
 	logger.Log(LOG_INFO, "DNSBL: httpbl.org, IP:", ip, ", score:", strconv.Itoa(score), ", threshold:", strconv.Itoa(conf_max_score), ", verdict: legit, dnsbl_retval:", host[0])
